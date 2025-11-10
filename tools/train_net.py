@@ -3,6 +3,8 @@ import logging
 import os
 import sys
 import gc
+import time
+import json
 import numpy as np
 import copy
 from collections import OrderedDict
@@ -54,6 +56,83 @@ import cubercnn.vis.logperf as utils_logperf
 MAX_TRAINING_ATTEMPTS = 10
 
 
+def convert_results_format(results_json, data_loader):
+    """
+    Convert results_json from flat list format to grouped by image format.
+    
+    Args:
+        results_json: List of detection results in flat format
+        data_loader: DataLoader to get image metadata
+        
+    Returns:
+        List of results grouped by image_id matching results_json_0 format
+    """
+    
+    # Group instances by image_id
+    image_groups = {}
+    for instance in results_json:
+        image_id = instance['image_id']
+        if image_id not in image_groups:
+            image_groups[image_id] = []
+        
+        # Create instance in the expected format
+        converted_instance = {
+            "image_id": instance['image_id'],
+            "category_id": instance['category_id'],
+            "bbox": instance["bbox"],
+            "score": instance['score'],
+            "depth": instance['depth'],
+            "bbox3D": instance['bbox3D'],
+            "center_cam": instance['center_cam'],
+            "center_2D": instance['center_2D'],
+            "dimensions": instance['dimensions'],
+            "pose": instance['pose']
+        }
+        
+        image_groups[image_id].append(converted_instance)
+    
+    # Create the final format - list of images with their instances
+    converted_results = []
+    
+    # Get image metadata from data_loader if available
+    image_metadata = {}
+
+    if hasattr(data_loader, 'dataset') and hasattr(data_loader.dataset, '_dataset'):
+        dataset = data_loader.dataset._dataset
+        for item in dataset:
+            if 'image_id' in item:
+                image_metadata[item['image_id']] = {
+                    'K': item['K'],
+                    'width': item.get('width', 640),
+                    'height': item.get('height', 480)
+                }
+    
+    # Convert to grouped format
+    for image_id, instances in image_groups.items():
+        # Get metadata for this image
+        if image_id in image_metadata:
+            K = image_metadata[image_id]['K']
+            width = image_metadata[image_id]['width']
+            height = image_metadata[image_id]['height']
+        else:
+            # Default values if metadata not available
+            K = np.eye(3)
+            width = 640
+            height = 480
+            
+        image_result = {
+            "image_id": image_id,
+            "K": K.tolist() if isinstance(K, np.ndarray) else K,
+            "width": width,
+            "height": height,
+            "instances": instances
+        }
+        
+        converted_results.append(image_result)
+    
+    return converted_results
+
+
 def do_test(cfg, model, iteration='final', storage=None, mode="novel"):
         
     filter_settings = data.get_filter_settings_from_cfg(cfg)    
@@ -81,6 +160,10 @@ def do_test(cfg, model, iteration='final', storage=None, mode="novel"):
         eval_categories = eval_categories
     )
     
+    # Initialize timing variables
+    total_inference_time = 0.0
+    total_samples = 0
+
     for dataset_name in dataset_names_test:
         """
         Cycle through each dataset and test them individually.
@@ -92,7 +175,57 @@ def do_test(cfg, model, iteration='final', storage=None, mode="novel"):
         Distributed Cube R-CNN inference
         '''
         data_loader = build_detection_test_loader(cfg, dataset_name, mode)
-        results_json = inference_on_dataset(model, data_loader)
+                
+        # Measure inference time and FPS
+        start_time = time.time()
+        # results_json_0 = inference_on_dataset(model, data_loader)
+        # results_json = inference_on_dataset(model, data_loader)
+        if "KITTI" in dataset_name:
+            results_path = "/home/kprokofi/3d_object_detection/DetAny3D/exps/inference/0925-003030/kitti_output_results.json"
+            results_json = json.load(open(results_path, 'r'))
+        elif "SUNRGBD" in dataset_name:
+            results_path = "/home/kprokofi/3d_object_detection/DetAny3D/exps/inference/0925-003030/sunrgbd_output_results.json"
+            results_json = json.load(open(results_path, 'r'))
+            # results_json_2 = json.load(open("/home/kprokofi/3d_object_detection/ovmono3d/output/ovmono3d_lift/inference/iter_final/KITTI_test/omni_instances_results.json", 'r'))
+        
+        # # Extract unique category_ids from both results_json_0 and results_json
+        # category_ids_0 = set([item["image_id"] for item in results_json_0 if "image_id" in item])
+        # category_ids = set([item["image_id"] for item in results_json_1 if "image_id" in item])
+
+        # for idx, cat in enumerate(results_json):
+        #     if cat["image_id"] not in category_ids:
+        #         results_json.pop(idx)
+
+        # # Compare the sets and log the differences
+        # missing_in_results_json = category_ids_0 - category_ids
+        # missing_in_results_json_0 = category_ids - category_ids_0
+
+        # logger.info(f"Unique category_ids in results_json_0: {sorted(list(category_ids_0))}")
+        # logger.info(f"Unique category_ids in results_json: {sorted(list(category_ids))}")
+        # if missing_in_results_json:
+        #     logger.warning(f"Category_ids in results_json_0 but not in results_json: {sorted(list(missing_in_results_json))}")
+        # if missing_in_results_json_0:
+        #     logger.warning(f"Category_ids in results_json but not in results_json_0: {sorted(list(missing_in_results_json_0))}")
+        
+        # Convert results_json format to match results_json_0 format
+        results_json = convert_results_format(results_json, data_loader) 
+
+        end_time = time.time()
+        # Calculate timing metrics
+        dataset_inference_time = end_time - start_time
+        dataset_samples = len(data_loader.dataset)
+        dataset_fps = dataset_samples / dataset_inference_time if dataset_inference_time > 0 else 0
+        dataset_latency = (dataset_inference_time * 1000) / dataset_samples if dataset_samples > 0 else 0
+        
+        # Accumulate total metrics
+        total_inference_time += dataset_inference_time
+        total_samples += dataset_samples
+        
+        logger.info(f"Dataset {dataset_name} Performance:")
+        logger.info(f"  - Samples: {dataset_samples}")
+        logger.info(f"  - Inference time: {dataset_inference_time:.3f}s")
+        logger.info(f"  - FPS: {dataset_fps:.2f}")
+        logger.info(f"  - Latency per sample: {dataset_latency:.2f}ms")
 
         if comm.is_main_process():
             
@@ -106,22 +239,22 @@ def do_test(cfg, model, iteration='final', storage=None, mode="novel"):
             '''
             Optionally, visualize some instances
             '''
-            category_path = "configs/category_meta.json" # TODO: hard coded
-            metadata = util.load_json(category_path)
-            category_names_official =  metadata['thing_classes']
+            # category_path = "configs/category_meta.json" # TODO: hard coded
+            # metadata = util.load_json(category_path)
+            # category_names_official =  metadata['thing_classes']
             # if mode == "novel":
             #     category_path = "configs/category_meta.json" # TODO: hard coded
             #     metadata = util.load_json(category_path)
             #     category_names_official =  metadata['thing_classes']
             # else:
             #     category_names_official = MetadataCatalog.get('omni3d_model').thing_classes
-            instances = torch.load(os.path.join(output_folder, dataset_name, 'instances_predictions.pth'))
-            log_str = vis.visualize_from_instances(
-                instances, data_loader.dataset, dataset_name, 
-                cfg.INPUT.MIN_SIZE_TEST, os.path.join(output_folder, dataset_name), 
-                category_names_official, MetadataCatalog.get(dataset_name).thing_classes, iteration
-            )
-            logger.info(log_str)
+            # instances = torch.load(os.path.join(output_folder, dataset_name, 'instances_predictions.pth'), weights_only=False)
+            # log_str = vis.visualize_from_instances(
+            #     instances, data_loader.dataset, dataset_name, 
+            #     cfg.INPUT.MIN_SIZE_TEST, os.path.join(output_folder, dataset_name), 
+            #     category_names_official, MetadataCatalog.get(dataset_name).thing_classes, iteration
+            # )
+            # logger.info(log_str)
 
     if comm.is_main_process():
         
@@ -130,6 +263,21 @@ def do_test(cfg, model, iteration='final', storage=None, mode="novel"):
         '''  
         eval_helper.summarize_all()
 
+        # Log overall performance metrics
+        overall_fps = total_samples / total_inference_time if total_inference_time > 0 else 0
+        overall_latency = (total_inference_time * 1000) / total_samples if total_samples > 0 else 0
+        
+        logger.info("Overall Test Performance:")
+        logger.info(f"  - Total samples: {total_samples}")
+        logger.info(f"  - Total inference time: {total_inference_time:.3f}s")
+        logger.info(f"  - Overall FPS: {overall_fps:.2f}")
+        logger.info(f"  - Overall latency per sample: {overall_latency:.2f}ms")
+        
+        # Log to tensorboard/storage if available
+        if storage is not None:
+            storage.put_scalar("test/fps", overall_fps)
+            storage.put_scalar("test/latency_ms", overall_latency)
+            storage.put_scalar("test/inference_time", total_inference_time)
 
 def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=False):
 

@@ -106,6 +106,11 @@ def visualize_from_instances(detections, dataset, dataset_name, min_size_test, o
     for imind, im_obj in enumerate(detections):
         
         write_sample = ((imind % 50) == 0)
+
+        for indx, item in enumerate(dataset._dataset):
+            if item['image_id'] == im_obj['image_id']:
+                imind = indx
+                break
         
         annos = dataset._dataset[imind]['annotations']
         gt_boxes_2d = np.array([anno['bbox'] for anno in annos])

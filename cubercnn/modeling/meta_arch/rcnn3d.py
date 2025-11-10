@@ -15,11 +15,11 @@ from detectron2.utils.logger import _log_api_usage
 from detectron2.modeling.meta_arch import (
     META_ARCH_REGISTRY, GeneralizedRCNN
 )
-from cubercnn.modeling.roi_heads import build_roi_heads
 
 from detectron2.data import MetadataCatalog
 from pytorch3d.transforms import rotation_6d_to_matrix
 from cubercnn.modeling.roi_heads import build_roi_heads
+from cubercnn.modeling.backbone.dino import build_dino_backbone
 from cubercnn import util, vis
 
 @META_ARCH_REGISTRY.register()

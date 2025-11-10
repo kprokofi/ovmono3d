@@ -85,12 +85,12 @@ class ROIHeads3DGDINO(ROIHeads3D):
         )
 
         self.groundingdino_model = load_model(
-            "./configs/GroundingDINO_SwinB_cfg.py", 
-            "./checkpoints/groundingdino_swinb_cogcoor.pth", 
+            "/home/kprokofi/3d_object_detection/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py", 
+            "/home/kprokofi/3d_object_detection/GroundingDINO/weights/groundingdino_swint_ogc.pth", 
             cpu_only=False
         )
 
-    def forward(self, images, features, proposals, Ks, im_scales_ratio, targets=None, category_list=None):
+    def forward(self, images, features, proposals, Ks, im_scales_ratio, targets=None, category_list=["car"]):
 
         im_dims = [image.shape[1:] for image in images]
 
@@ -115,17 +115,17 @@ class ROIHeads3DGDINO(ROIHeads3D):
             # when oracle is available, by pass the box forward.
             # simulate the predicted instances by creating a new 
             # instance for each passed in image.
-            if isinstance(proposals, list) and ~np.any([isinstance(p, Instances) for p in proposals]):
-                pred_instances = []
-                for proposal, im_dim in zip(proposals, im_dims):
+            # if isinstance(proposals, list) and ~np.any([isinstance(p, Instances) for p in proposals]):
+            #     pred_instances = []
+            #     for proposal, im_dim in zip(proposals, im_dims):
                     
-                    pred_instances_i = Instances(im_dim)
-                    pred_instances_i.pred_boxes = Boxes(proposal['gt_bbox2D'])
-                    pred_instances_i.pred_classes =  proposal['gt_classes']
-                    pred_instances_i.scores = torch.ones_like(proposal['gt_classes']).float()
-                    pred_instances.append(pred_instances_i)
-            else:
-                pred_instances = self._forward_box(features, proposals)
+            #         pred_instances_i = Instances(im_dim)
+            #         pred_instances_i.pred_boxes = Boxes(proposal['gt_bbox2D'])
+            #         pred_instances_i.pred_classes =  proposal['gt_classes']
+            #         pred_instances_i.scores = torch.ones_like(proposal['gt_classes']).float()
+            #         pred_instances.append(pred_instances_i)
+            # else:
+            #     pred_instances = self._forward_box(features, proposals)
             
             if category_list:
                 filtered_texts = [ [cat]  for cat in  category_list]
@@ -154,8 +154,8 @@ class ROIHeads3DGDINO(ROIHeads3D):
                 ov_pred_instances = grounding_dino_inference_detector(configs)
                 
                 # init target
-                target = Instances(pred_instances[0].image_size)
-                
+                target = Instances(images[0].shape[1:])
+
                 # add classes, 2D boxes, scores
                 class_names = ov_pred_instances["labels"]
                 # h, w = pred_instances[0].image_size
@@ -164,7 +164,7 @@ class ROIHeads3DGDINO(ROIHeads3D):
                 # max_scores = [torch.max(score_tensor).item() for score_tensor in ov_pred_instances["scores"]]
                 # target.scores = torch.tensor(max_scores).float()
                 target.scores = ov_pred_instances["scores"]
-                target = target.to(device=pred_instances[0].scores.device)
+                target = target.to(device=images[0].device)
 
             if self.loss_w_3d > 0:
                 pred_instances = self._forward_cube(features, [target,], Ks, im_dims, im_scales_ratio)

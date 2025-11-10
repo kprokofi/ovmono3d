@@ -59,7 +59,7 @@ MODEL:
   PROPOSAL_GENERATOR:
     NAME: "RPNWithIgnore"
   ROI_HEADS:
-    NAME: "ROIHeads3D"
+    NAME: "ROIHeads3DGDINO"
     IN_FEATURES: ["p2", "p3", "p4", "p5", 'p6']
     BATCH_SIZE_PER_IMAGE: 512
     SCORE_THRESH_TEST: 0.01

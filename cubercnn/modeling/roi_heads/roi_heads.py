@@ -457,7 +457,7 @@ class ROIHeads3D(StandardROIHeads):
                 cube_z = cube_z[fg_inds, :]
 
         if self.dims_priors_enabled:
-            
+            print(cube_dims.shape, fg_inds, box_classes)
             cube_dims = cube_dims[fg_inds, box_classes, :]
             cube_pose = cube_pose[fg_inds, box_classes, :, :]
         else:

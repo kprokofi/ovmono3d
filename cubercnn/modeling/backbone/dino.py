@@ -26,7 +26,8 @@ class DINOBackbone(Backbone):
         # get model
         self.model_name = dino_name
         self.checkpoint_name = f"{dino_name}_{model_name}"
-        dino_vit = torch.hub.load(f"facebookresearch/{dino_name}", self.checkpoint_name)
+        dino_vit = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14', skip_validation=True)
+
         self.vit = dino_vit
         self.has_registers = "_reg" in model_name
 

@@ -824,7 +824,6 @@ class Omni3DEvaluator(COCOEvaluator):
 
         # Optional image keys to keep when available
         img_keys_optional = ["p2"]
-
         for input, output in zip(inputs, outputs):
 
             prediction = {
