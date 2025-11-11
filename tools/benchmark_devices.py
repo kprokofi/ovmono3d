@@ -43,7 +43,7 @@ from tqdm import tqdm
 # Setup paths
 sys.dont_write_bytecode = True
 sys.path.append(os.getcwd())
-sys.path.append('/home/kprokofi/3d_object_detection/ovmono3d')
+sys.path.append('/opt/home/devuser/ovmono3d')
 
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
