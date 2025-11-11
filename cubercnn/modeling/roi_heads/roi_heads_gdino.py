@@ -180,6 +180,7 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold=No
     if not caption.endswith("."):
         caption = caption + " ."
     device = "cuda" if not cpu_only else "cpu"
+    device = "xpu" if torch.xpu.is_available() else device
     model = model.to(device)
     image = image.to(device)
     with torch.no_grad():

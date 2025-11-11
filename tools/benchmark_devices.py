@@ -174,7 +174,6 @@ class OVMono3DBenchmark:
         DetectionCheckpointer(model).resume_or_load(self.cfg.MODEL.WEIGHTS, resume=True)
         
         # Move to device
-        model.device = self.device
         model.to(self.device)
         
         # Note: Upstream PyTorch handles XPU optimizations automatically
